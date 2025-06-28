@@ -1,0 +1,3 @@
+/home/cuong/Downloads/MonoVo/MonoVo/build/CMakeFiles/vo.dir
+/home/cuong/Downloads/MonoVo/MonoVo/build/CMakeFiles/edit_cache.dir
+/home/cuong/Downloads/MonoVo/MonoVo/build/CMakeFiles/rebuild_cache.dir
