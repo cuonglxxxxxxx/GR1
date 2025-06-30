@@ -7,22 +7,22 @@
 #include "WiFi.h" 
 #include "ESPAsyncWebServer.h" 
 
-#define EEPROM_SIZE 1
+#define EEPROM_SIZE 2
 // const char *ssid = "9ngo12T3";
 // const char *password = "55556666";
-const char *ssid = "VNPT_Thinh Hue";
-const char *password = "12345678";
-// const char *ssid = "ESP";
-// const char *password = "12345678d";
+// const char *ssid = "VNPT_Thinh Hue";
+// const char *password = "12345678";
+const char *ssid = "ESP";
+const char *password = "12345678d";
 
 // Tạo đối tượng AsyncWebServer trên cổng 80
 AsyncWebServer server(80);
 int pictureNumber = 0;
-bool isCapturing = false; // Trạng thái chụp ảnh liên tục
+bool isCapturing = false; 
 unsigned long lastCaptureTime = 0;
-const int captureInterval = 100; // 1 giây giữa các lần chụp ảnh
+const int captureInterval = 200;
 
-// Hàm phụ trợ để lấy danh sách tệp từ thẻ SD
+//Lấy danh sách tệp từ thẻ SD
 String listFiles() {
   String fileList = "";
   File root = SD_MMC.open("/");
@@ -52,7 +52,7 @@ String listFiles() {
   }
   return fileList;
 }
-// Trang HTML chính
+
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML>
 <html>
@@ -284,7 +284,7 @@ void startCameraServer() {
     request->send(200, "text/html", html);
   });
 
-  // Định tuyến để lấy trạng thái
+  // Lấy trạng thái
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
     String status = "";
     if (isCapturing) {
@@ -295,13 +295,13 @@ void startCameraServer() {
     request->send(200, "text/html", status);
   });
 
-  // Định tuyến để lấy danh sách file
+  // Lấy danh sách file
   server.on("/filelist", HTTP_GET, [](AsyncWebServerRequest *request){
     String files = listFiles();
     request->send(200, "text/html", files);
   });
 
-  // Định tuyến để bắt đầu chụp ảnh liên tục
+  // Chụp ảnh liên tục
   server.on("/startCapture", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!isCapturing) {
       isCapturing = true;
@@ -311,7 +311,7 @@ void startCameraServer() {
     request->send(200, "text/plain", "OK");
   });
 
-  // Định tuyến để dừng chụp ảnh liên tục
+  // Dừng chụp ảnh liên tục
   server.on("/stopCapture", HTTP_GET, [](AsyncWebServerRequest *request){
     if (isCapturing) {
       isCapturing = false;
@@ -320,7 +320,7 @@ void startCameraServer() {
     request->send(200, "text/plain", "OK");
   });
 
-  // Định tuyến để chụp 1 ảnh đơn lẻ
+  // Chụp 1 ảnh đơn lẻ
   server.on("/singleCapture", HTTP_GET, [](AsyncWebServerRequest *request){
     camera_fb_t * fb = esp_camera_fb_get();  
     if(!fb) {
@@ -329,7 +329,10 @@ void startCameraServer() {
     }
     
     pictureNumber = EEPROM.read(0) + 1;
-    String path = "/picture" + String(pictureNumber) + ".jpg";
+    char filename[30];
+    sprintf(filename, "%06d.jpg", pictureNumber);
+    String path = String(filename);
+    // String path = "/picture" + String(pictureNumber) + ".jpg";
     
     File file = SD_MMC.open(path.c_str(), FILE_WRITE);
     if(!file) {
@@ -347,7 +350,7 @@ void startCameraServer() {
     esp_camera_fb_return(fb);
   });
 
-  // Định tuyến để xem ảnh
+  // Xem ảnh
   server.on("/picture", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!request->hasParam("name")) {
       request->send(400, "text/plain", "Thiếu tham số name");
@@ -363,7 +366,7 @@ void startCameraServer() {
     request->send(SD_MMC, "/" + fileName, "image/jpeg");
   });
 
-  // Định tuyến để tải xuống
+  // Tải ảnh
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!request->hasParam("name")) {
       request->send(400, "text/plain", "Thiếu tham số name");
@@ -380,7 +383,7 @@ void startCameraServer() {
     request->send(response);
   });
 
-  // Định tuyến để xóa tệp
+  // Xóa ảnh
   server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!request->hasParam("name")) {
       request->send(400, "text/plain", "Thiếu tham số name");
@@ -404,9 +407,12 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
-
   // Cấu hình IP tĩnh
   // IPAddress STATIC_IP(192,168,200,113);
+  IPAddress STATIC_IP(192,168,4,1);
+  IPAddress GATE(192,168,4,1);
+  IPAddress SUB(255,255,255,0);
+
   // IPAddress STATIC_IP(192,168,207,10);
   // if(!WiFi.config(STATIC_IP)){
   //   Serial.println("Cấu hình IP tĩnh thất bại");
@@ -434,7 +440,8 @@ void setup() {
   config.pin_reset          = RESET_GPIO_NUM;
   config.xclk_freq_hz       = 20000000;
   config.pixel_format       = PIXFORMAT_JPEG;
-  config.frame_size         = FRAMESIZE_UXGA; // Độ phân giải cao cho ảnh
+  // config.frame_size         = FRAMESIZE_UXGA; // Độ phân giải cao cho ảnh
+  config.frame_size = FRAMESIZE_XGA;
   config.jpeg_quality       = 10; // Chất lượng cao cho ảnh
   config.fb_count           = 1;
 
@@ -484,7 +491,14 @@ void setup() {
   // Khởi tạo EEPROM
   EEPROM.begin(EEPROM_SIZE);
   pictureNumber = EEPROM.read(0);
-
+#if 1
+    WiFi.softAPConfig(STATIC_IP,GATE,SUB);
+    WiFi.softAP(ssid, password);  
+    IPAddress ip = WiFi.softAPIP();
+    Serial.print("Địa chỉ IP của AP: ");
+    Serial.println(ip);
+#endif
+#if 0
   // Kết nối WiFi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -495,11 +509,10 @@ void setup() {
   Serial.println("WiFi đã kết nối");
   Serial.print("Địa chỉ IP: ");
   Serial.println(WiFi.localIP());
-
-  startCameraServer();
   Serial.println("Máy chủ web đã bắt đầu");
+#endif
+  startCameraServer();
 }
-
 void loop() {
   unsigned long currentTime = millis();
   
@@ -507,20 +520,20 @@ void loop() {
   if (isCapturing && currentTime - lastCaptureTime >= captureInterval) {
     camera_fb_t * fb = esp_camera_fb_get();
     if (fb) {
-      pictureNumber = EEPROM.read(0) + 1;
-      String path = "/picture" + String(pictureNumber) + ".jpg";
-      
-      File file = SD_MMC.open(path.c_str(), FILE_WRITE);
-      if (file) {
-        file.write(fb->buf, fb->len);
-        EEPROM.write(0, pictureNumber);
-        EEPROM.commit();
-        file.close();
-        Serial.println("Đã chụp ảnh: " + path);
-      }
-      
-      esp_camera_fb_return(fb);
-      lastCaptureTime = currentTime;
+    char filename[30];
+    sprintf(filename, "%06d.jpg", pictureNumber);
+    String path = String(filename);
+
+    File file = SD_MMC.open(path.c_str(), FILE_WRITE);
+    if (file) {
+      file.write(fb->buf, fb->len);
+      EEPROM.write(0, pictureNumber);
+      EEPROM.commit();
+      file.close();
+      Serial.println("Đã chụp ảnh: " + path);
+    }
+    esp_camera_fb_return(fb);
+    lastCaptureTime = currentTime;
     }
   }
   
