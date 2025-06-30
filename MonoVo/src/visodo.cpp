@@ -6,10 +6,7 @@ using namespace std;
 #define MAX_FRAME 349
 #define MIN_NUM_FEAT 2000
 
-// IMP: Change the file directories (4 places) according to where your dataset is saved before running!
-
 double getAbsoluteScale(int frame_id, int sequence_id, double z_cal)	{
-  
   string line;
   int i = 0;
   ifstream myfile ("/media/cuong/Kingston 64GB/data_odometry_poses/dataset/poses/00.txt");
@@ -23,7 +20,6 @@ double getAbsoluteScale(int frame_id, int sequence_id, double z_cal)	{
       x_prev = x;
       y_prev = y;
       std::istringstream in(line);
-      //cout << line << '\n';
       for (int j=0; j<12; j++)  {
         in >> z ;
         if (j==7) y=z;
@@ -43,29 +39,13 @@ double getAbsoluteScale(int frame_id, int sequence_id, double z_cal)	{
   return sqrt((x-x_prev)*(x-x_prev) + (y-y_prev)*(y-y_prev) + (z-z_prev)*(z-z_prev)) ;
 
 }
-double getAbsoluteScale(Mat prev_t,Mat t)	{
-
-  double x =0, y=0, z = 0;
-    z=t.at<double>(2);
-    // y=t.at<double>(1);
-    // x=t.at<double>(0);
-  double x_prev, y_prev, z_prev;
-    z_prev = prev_t.at<double>(2);
-    // x_prev = prev_t.at<double>(0);
-    // y_prev = prev_t.at<double>(1);
-  return sqrt((x-x_prev)*(x-x_prev) + (y-y_prev)*(y-y_prev) + (z-z_prev)*(z-z_prev)) ;
-  // return sqrt((z-z_prev)*(z-z_prev)) ;
-
-}
-
 int main( int argc, char** argv )	{
 
   Mat img_1, img_2;
-  Mat R_f, t_f; //the final rotation and tranlation vectors containing the 
+  Mat R_f, t_f; 
 
   ofstream myfile;
   myfile.open ("results1_1.txt");
-
   double scale = 1.00;
   char filename1[200];
   char filename2[200];
@@ -90,18 +70,17 @@ int main( int argc, char** argv )	{
   cvtColor(img_2_c, img_2, COLOR_BGR2GRAY);
 
   // feature detection, tracking
-  vector<Point2f> points1, points2;        //vectors to store the coordinates of the feature points
-  featureDetection(img_1, points1);        //detect features in img_1
+  vector<Point2f> points1, points2;        
+  featureDetection(img_1, points1);        
   vector<uchar> status;
-  featureTracking(img_1,img_2,points1,points2, status); //track those features to img_2
+  featureTracking(img_1,img_2,points1,points2, status); 
 
-  //TODO: add a fucntion to load these values directly from KITTI's calib files
-  // WARNING: different sequences in the KITTI VO dataset have different intrinsic/extrinsic parameters
   // double focal = 718.8560;
   // cv::Point2d pp(607.1928, 185.2157);
   double focal = 982.07520766;
   cv::Point2d pp(636.25591239, 358.9789418);
-  //recovering the pose and the essential matrix
+
+  //Pose và ma trận E
   Mat E, R, t, mask;
   E = findEssentialMat(points2, points1, focal, pp, RANSAC, 0.999, 1.0, mask);
   recoverPose(E, points2, points1, R, t, focal, pp, mask);
@@ -117,14 +96,13 @@ int main( int argc, char** argv )	{
   t_f = t.clone();
   clock_t begin = clock();
 
-  namedWindow( "Road facing camera", WINDOW_AUTOSIZE );// Create a window for display.
-  namedWindow( "Trajectory", WINDOW_AUTOSIZE );// Create a window for display.
+  namedWindow( "Road facing camera", WINDOW_AUTOSIZE );
+  namedWindow( "Trajectory", WINDOW_AUTOSIZE );
 
   Mat traj = Mat::zeros(1200, 600, CV_8UC3);
 
   for(int numFrame=3; numFrame < MAX_FRAME; numFrame++)	{
   	sprintf(filename, "/home/cuong/Downloads/MonoVo/Data/ESP32Cam/%06d.png", numFrame);
-    //cout << numFrame << endl;
     Mat prev_t=t.clone();
   	Mat currImage_c = imread(filename);
   	cvtColor(currImage_c, currImage, COLOR_BGR2GRAY);
@@ -137,7 +115,7 @@ int main( int argc, char** argv )	{
     Mat prevPts(2,prevFeatures.size(), CV_64F), currPts(2,currFeatures.size(), CV_64F);
 
 
-   for(int i=0;i<prevFeatures.size();i++)	{   //this (x,y) combination makes sense as observed from the source code of triangulatePoints on GitHub
+   for(int i=0;i<prevFeatures.size();i++)	{   //chuyển tọa độ (x,y) sang tọa độ (x,y,1)
   		prevPts.at<double>(0,i) = prevFeatures.at(i).x;
   		prevPts.at<double>(1,i) = prevFeatures.at(i).y;
 
@@ -146,31 +124,18 @@ int main( int argc, char** argv )	{
     }
 
   	// scale = getAbsoluteScale(numFrame, 0, t.at<double>(2));
-    // scale=getAbsoluteScale(prev_t,t)*100;
     scale=t.at<double>(2);
-    // scale=0.7;
     if ((scale>0.1)&&(t.at<double>(2) > t.at<double>(0)) && (t.at<double>(2) > t.at<double>(1))) {
-    // if ((t.at<double>(2) > t.at<double>(0)) && (t.at<double>(2) > t.at<double>(1))) {
       t_f = t_f +scale*(R_f*t);
       R_f = R*R_f;
     }
-  
-    // else {
-     //cout << "scale below 0.1, or incorrect translation" << endl;
-    // }
-    
-   // lines for printing results
-   // myfile << t_f.at<double>(0) << " " << t_f.at<double>(1) << " " << t_f.at<double>(2) << endl;
 
-  // a redetection is triggered in case the number of feautres being trakced go below a particular threshold
+  // Nếu số lượng điểm đặc trưng quá ít
  	  if (prevFeatures.size() < MIN_NUM_FEAT)	{
-      //cout << "Number of tracked features reduced to " << prevFeatures.size() << endl;
-      //cout << "trigerring redection" << endl;
  		  featureDetection(prevImage, prevFeatures);
       featureTracking(prevImage,currImage,prevFeatures,currFeatures, status);
 
  	  }
-
     prevImage = currImage.clone();
     prevFeatures = currFeatures;
 
